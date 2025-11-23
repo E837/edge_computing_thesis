@@ -1,11 +1,16 @@
+# File: cluster_node/app.py
 from flask import Flask, request, jsonify
 import os
+import requests
 
 app = Flask(__name__)
 
-# Get the Node Type and ID from Environment Variables (set in docker-compose)
-NODE_TYPE = os.getenv('NODE_TYPE', 'unknown')
 NODE_ID = os.getenv('NODE_ID', 'unknown')
+NODE_TYPE = os.getenv('NODE_TYPE', 'cluster_manager')
+
+# Storage for my neighbors (Vicinity)
+# This list will be populated by the Central Node
+MY_VICINITY = [] 
 
 @app.route('/')
 def health_check():
@@ -13,16 +18,22 @@ def health_check():
         "status": "online",
         "node_type": NODE_TYPE,
         "node_id": NODE_ID,
-        "message": f"Hello from {NODE_TYPE} {NODE_ID}"
+        "vicinity": MY_VICINITY
     })
 
-# This endpoint will receive container deployment requests (as per your PDF)
-@app.route('/deploy', methods=['POST'])
-def deploy_container():
+# --- NEW: Endpoint to receive Vicinity list from Central Node ---
+@app.route('/update_vicinity', methods=['POST'])
+def update_vicinity():
+    global MY_VICINITY
     data = request.json
-    # TODO: Implement the logic to check RAM/CPU and assign to a cluster
-    print(f"Received deployment request: {data}")
-    return jsonify({"status": "processing", "target": "TBD"})
+    
+    # Expecting input like: {"neighbors": ["http://cluster_2:5000"]}
+    if 'neighbors' in data:
+        MY_VICINITY = data['neighbors']
+        print(f"Cluster {NODE_ID} Vicinity Updated: {MY_VICINITY}")
+        return jsonify({"status": "success", "message": "Vicinity updated"}), 200
+    else:
+        return jsonify({"status": "error", "message": "No neighbors provided"}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
