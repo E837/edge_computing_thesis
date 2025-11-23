@@ -18,7 +18,7 @@ def update_vicinity():
     data = request.json
     if 'neighbors' in data:
         MY_VICINITY = data['neighbors']
-        return jsonify({"status": "success"}), 200
+        return jsonify({"status": "success", "vicinity_count": len(MY_VICINITY)}), 200
     return jsonify({"error": "missing data"}), 400
 
 @app.route('/register_worker', methods=['POST'])
@@ -29,11 +29,28 @@ def register_worker():
         "url": data['worker_url'],
         "capacity": data['capacity']
     }
-    print(f"Worker {w_id} registered at {data['worker_url']}")
+    print(f"Worker {w_id} registered.")
     return jsonify({"status": "registered"}), 200
+
+def calculate_local_resources():
+    """Helper function to get current local stats"""
+    total_cpu = 0
+    avail_cpu = 0
+    
+    for w_id, info in WORKERS.items():
+        try:
+            resp = requests.get(f"{info['url']}/stats", timeout=1)
+            if resp.status_code == 200:
+                stats = resp.json()
+                total_cpu += stats['capacity']['cpu']
+                avail_cpu += stats['available']['cpu']
+        except:
+            pass
+    return total_cpu, avail_cpu
 
 @app.route('/cluster_resources')
 def get_cluster_resources():
+    # Aggregates resources for Central Node
     total_cpu = 0
     total_ram = 0
     avail_cpu = 0
@@ -42,7 +59,7 @@ def get_cluster_resources():
 
     for w_id, info in WORKERS.items():
         try:
-            resp = requests.get(f"{info['url']}/stats", timeout=2)
+            resp = requests.get(f"{info['url']}/stats", timeout=1)
             if resp.status_code == 200:
                 stats = resp.json()
                 total_cpu += stats['capacity']['cpu']
@@ -51,7 +68,7 @@ def get_cluster_resources():
                 avail_ram += stats['available']['ram']
                 active_workers += 1
         except:
-            print(f"Worker {w_id} unreachable")
+            pass
 
     return jsonify({
         "cluster_id": NODE_ID,
@@ -62,36 +79,70 @@ def get_cluster_resources():
 
 @app.route('/run_container', methods=['POST'])
 def run_container():
+    """
+    Algorithm 4 Implementation:
+    1. Try Local Allocation.
+    2. If Local Fails -> Try Vicinity Offloading.
+    """
     data = request.json
+    req_cpu = float(data.get('req_cpu', 0))
     
-    # 1. Select a worker (First available for now)
-    target_worker = None
-    if len(WORKERS) > 0:
-        target_worker = list(WORKERS.keys())[0]
+    # --- STEP 1: Check Local Resources ---
+    _, local_avail = calculate_local_resources()
+    print(f"Request: {req_cpu} CPU. Local Available: {local_avail}")
 
-    if not target_worker:
-        return jsonify({"status": "error", "message": "No workers registered"}), 500
-
-    # 2. Forward request to Edge Node
-    worker_url = WORKERS[target_worker]['url']
-    print(f"Forwarding deployment to {target_worker} at {worker_url}")
-
-    try:
-        # We REMOVED the try/pass block. Now we catch and report errors.
-        resp = requests.post(f"{worker_url}/allocate_resources", json=data, timeout=5)
+    # Simple heuristic: Do we have enough space locally?
+    if local_avail >= req_cpu:
+        # Logic to deploy locally
+        target_worker = list(WORKERS.keys())[0] # Simplification: Pick first
+        worker_url = WORKERS[target_worker]['url']
         
-        if resp.status_code == 200:
-            return jsonify({
-                "status": "deployed", 
-                "target_worker": target_worker,
-                "worker_response": resp.json()
-            })
-        else:
-            return jsonify({"status": "failed", "reason": f"Edge Node returned {resp.status_code}"}), 500
-            
-    except Exception as e:
-        print(f"DEPLOYMENT ERROR: {str(e)}")
-        return jsonify({"status": "failed", "reason": f"Connection failed: {str(e)}"}), 500
+        try:
+            resp = requests.post(f"{worker_url}/allocate_resources", json=data, timeout=5)
+            if resp.status_code == 200:
+                return jsonify({
+                    "status": "deployed_locally", 
+                    "target_worker": target_worker
+                })
+        except Exception as e:
+            print(f"Local deployment error: {e}")
+
+    # --- STEP 2: Vicinity Offloading (Algorithm 4) ---
+    print(f"Local Cluster {NODE_ID} Overloaded! Attempting Vicinity Offload...")
+    
+    # Check 'is_offloaded' to prevent infinite loops (Ping-Pong effect)
+    if data.get('is_offloaded'):
+        return jsonify({"status": "failed", "reason": "Already offloaded once, stopping chain"}), 503
+
+    # Mark request as offloaded
+    offload_data = data.copy()
+    offload_data['is_offloaded'] = True
+
+    for neighbor_url in MY_VICINITY:
+        try:
+            print(f"Checking Neighbor: {neighbor_url}")
+            # 1. Ask Neighbor if they have space (Query their /cluster_resources)
+            res_check = requests.get(f"{neighbor_url}/cluster_resources", timeout=2)
+            if res_check.status_code == 200:
+                neighbor_stats = res_check.json()
+                neighbor_avail = neighbor_stats['available_resources']['cpu']
+                
+                if neighbor_avail >= req_cpu:
+                    # 2. Neighbor has space! Offload the task.
+                    print(f"Offloading to {neighbor_url}...")
+                    deploy_resp = requests.post(f"{neighbor_url}/run_container", json=offload_data, timeout=5)
+                    
+                    if deploy_resp.status_code == 200:
+                        return jsonify({
+                            "status": "offloaded_vicinity",
+                            "original_cluster": NODE_ID,
+                            "assigned_neighbor": neighbor_url,
+                            "neighbor_response": deploy_resp.json()
+                        })
+        except Exception as e:
+            print(f"Failed to contact neighbor {neighbor_url}: {e}")
+
+    return jsonify({"status": "failed", "reason": "Cluster Full & Vicinity Full"}), 503
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
