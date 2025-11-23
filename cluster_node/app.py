@@ -85,5 +85,40 @@ def get_cluster_resources():
         "available_resources": {"cpu": avail_cpu, "ram": avail_ram}
     })
 
+# --- NEW: Deploy Trigger ---
+@app.route('/run_container', methods=['POST'])
+def run_container():
+    """
+    Simulates running a container.
+    In a real system, this would call Docker API.
+    Here, we just log it. 
+    (Note: To strictly follow the logic, we should deduct resources from a specific worker,
+    but for this high-level simulation, we assume the Cluster Manager handles scheduling).
+    """
+    data = request.json
+    req_cpu = data.get('req_cpu')
+    
+    # Find a worker to take this load (Simple Round Robin or First Fit)
+    # For simplicity, we just pick the first capable worker
+    target_worker = None
+    for w_id, info in WORKERS.items():
+        # In a real implementation, we would check worker specifics here again
+        target_worker = w_id
+        break
+        
+    if target_worker:
+        print(f"Deploying app (CPU={req_cpu}) on Worker {target_worker}")
+        # Ideally, we send a request to the Edge Node to increase its usage.
+        # Let's simulate that notification:
+        try:
+            worker_url = WORKERS[target_worker]['url']
+            requests.post(f"{worker_url}/allocate_resources", json=data)
+        except:
+            pass
+            
+        return jsonify({"status": "deployed", "target_worker": target_worker})
+    
+    return jsonify({"status": "error", "message": "No workers available"}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

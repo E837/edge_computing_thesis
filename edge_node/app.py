@@ -73,5 +73,18 @@ def get_stats():
         }
     })
 
+@app.route('/allocate_resources', methods=['POST'])
+def allocate_resources():
+    data = request.json
+    req_cpu = data.get('req_cpu', 0)
+    req_ram = data.get('req_ram', 0)
+    
+    # Increase simulated usage
+    current_usage['cpu'] += req_cpu
+    current_usage['ram'] += req_ram
+    
+    print(f"Resources allocated! New Usage: CPU={current_usage['cpu']}")
+    return jsonify({"status": "allocated", "new_usage": current_usage})
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
