@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # --- Layer 1: Cloud / Central Node ---
+  central_node:
+    build: ./central_node
+    container_name: central_node
+    environment:
+      - NODE_TYPE=central
+      - NODE_ID=main
+    ports:
+      - "5000:5000"  # Expose Central Node to your localhost
+    networks:
+      - edge_network
+
+  # --- Layer 2: Cluster Managers (3 Clusters) ---
+  cluster_1:
+    build: ./cluster_node
+    container_name: cluster_1
+    environment:
+      - NODE_TYPE=cluster_manager
+      - NODE_ID=1
+      - PARENT_NODE=central_node
+    networks:
+      - edge_network
+
+  cluster_2:
+    build: ./cluster_node
+    container_name: cluster_2
+    environment:
+      - NODE_TYPE=cluster_manager
+      - NODE_ID=2
+      - PARENT_NODE=central_node
+    networks:
+      - edge_network
+
+  cluster_3:
+    build: ./cluster_node
+    container_name: cluster_3
+    environment:
+      - NODE_TYPE=cluster_manager
+      - NODE_ID=3
+      - PARENT_NODE=central_node
+    networks:
+      - edge_network
+
+  # --- Layer 3: Edge Nodes (6 Devices, distributed among clusters) ---
+  # Cluster 1 has 2 Edge Nodes
+  edge_1_c1:
+    build: ./edge_node
+    container_name: edge_1_c1
+    environment:
+      - NODE_TYPE=edge_worker
+      - NODE_ID=1_c1
+      - PARENT_CLUSTER=cluster_1
+      - RESOURCES_CPU=4  # Simulating CPU cores
+      - RESOURCES_RAM=8192 # Simulating RAM in MB
+    networks:
+      - edge_network
+
+  edge_2_c1:
+    build: ./edge_node
+    container_name: edge_2_c1
+    environment:
+      - NODE_TYPE=edge_worker
+      - NODE_ID=2_c1
+      - PARENT_CLUSTER=cluster_1
+      - RESOURCES_CPU=2
+      - RESOURCES_RAM=4096
+    networks:
+      - edge_network
+
+  # Cluster 2 has 2 Edge Nodes
+  edge_3_c2:
+    build: ./edge_node
+    container_name: edge_3_c2
+    environment:
+      - NODE_TYPE=edge_worker
+      - NODE_ID=3_c2
+      - PARENT_CLUSTER=cluster_2
+      - RESOURCES_CPU=4
+      - RESOURCES_RAM=8192
+    networks:
+      - edge_network
+
+  edge_4_c2:
+    build: ./edge_node
+    container_name: edge_4_c2
+    environment:
+      - NODE_TYPE=edge_worker
+      - NODE_ID=4_c2
+      - PARENT_CLUSTER=cluster_2
+      - RESOURCES_CPU=2
+      - RESOURCES_RAM=4096
+    networks:
+      - edge_network
+
+  # Cluster 3 has 2 Edge Nodes
+  edge_5_c3:
+    build: ./edge_node
+    container_name: edge_5_c3
+    environment:
+      - NODE_TYPE=edge_worker
+      - NODE_ID=5_c3
+      - PARENT_CLUSTER=cluster_3
+      - RESOURCES_CPU=4
+      - RESOURCES_RAM=8192
+    networks:
+      - edge_network
+
+  edge_6_c3:
+    build: ./edge_node
+    container_name: edge_6_c3
+    environment:
+      - NODE_TYPE=edge_worker
+      - NODE_ID=6_c3
+      - PARENT_CLUSTER=cluster_3
+      - RESOURCES_CPU=2
+      - RESOURCES_RAM=4096
+    networks:
+      - edge_network
+
+networks:
+  edge_network:
+    driver: bridge
