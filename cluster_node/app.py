@@ -131,7 +131,7 @@ def run_container():
             
             # Note: We are forwarding the EXACT same JSON request to the neighbor
             print(f"[{NODE_ID}] Offloading to neighbor: {neighbor_url}")
-            offload_resp = requests.post(f"{neighbor_url}/run_container", json=data, timeout=2)
+            offload_resp = requests.post(f"{neighbor_url}/run_container", json=data, timeout=10)
             
             if offload_resp.status_code == 200:
                 resp_data = offload_resp.json()
