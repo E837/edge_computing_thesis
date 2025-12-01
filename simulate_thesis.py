@@ -3,6 +3,7 @@ import requests
 import random
 import time
 import csv
+import threading
 import json
 
 # Configuration
@@ -10,10 +11,13 @@ CENTRAL_NODE_URL = "http://localhost:5000"
 TOTAL_TASKS = 50
 CSV_FILENAME = "thesis_experiment_results.csv"
 
-# Task Parameters (Randomized to create realistic load)
+# Task Parameters
 MIN_CPU = 0.5
-MAX_CPU = 3.5 # Some tasks will be big, some small
+MAX_CPU = 3.5
 RAM_REQ = 100
+MIN_DURATION = 10 
+MAX_DURATION = 30 
+SLEEP_BETWEEN_TASKS = 3 
 
 def initialize():
     print("--- Initializing Network ---")
@@ -24,83 +28,119 @@ def initialize():
         print(f"Error initializing: {e}")
         exit()
 
-def get_cluster_status(cluster_id):
-    try:
-        resp = requests.get(f"http://localhost:5000/api/forward/{cluster_id}/cluster_resources")
-        # Note: Since we are outside docker, we might not reach cluster_1 directly 
-        # unless mapped. For this script, we just trust the deployment logs.
-        pass 
-    except:
-        pass
+# --- NEW: Background Logger ---
+def log_release(duration, cpu, worker_id):
+    """
+    Waits for the duration, then prints that resources are back.
+    """
+    time.sleep(duration)
+    # We print a newline first to ensure it doesn't mess up the current task line too much
+    print(f"\n[EVENT] ♻️  Resources Freed: {cpu} CPU from {worker_id}")
 
 def run_simulation():
     results = []
     print(f"\n--- Starting Simulation: {TOTAL_TASKS} Tasks ---")
+    print(f"Task Duration: {MIN_DURATION}s - {MAX_DURATION}s")
+    print(f"Arrival Rate: 1 task every ~{SLEEP_BETWEEN_TASKS}s")
 
-    # Open CSV for writing
     with open(CSV_FILENAME, mode='w', newline='') as file:
         writer = csv.writer(file)
-        # Header
-        writer.writerow(["Task_ID", "Req_CPU", "Status", "Assigned_Cluster", "Offload_Type", "Latency_Seconds"])
+        writer.writerow(["Task_ID", "Req_CPU", "Duration", "Status", "Assigned_Cluster", "Offload_Type", "Latency_Seconds"])
 
         for i in range(1, TOTAL_TASKS + 1):
-            # 1. Generate Random Task
             req_cpu = round(random.uniform(MIN_CPU, MAX_CPU), 1)
+            duration = random.randint(MIN_DURATION, MAX_DURATION)
             
-            print(f"Task {i}/{TOTAL_TASKS}: Requesting {req_cpu} CPU...", end=" ")
+            print(f"Task {i}: {req_cpu} CPU / {duration}s ...", end=" ", flush=True)
             
             start_time = time.time()
+            status = "Unknown"
+            assigned_cluster = "N/A"
+            offload_type = "N/A"
+            latency = 0
             
             try:
-                # 2. Send to Central Node
+                # Send Request
+                payload = {
+                    "req_cpu": req_cpu, 
+                    "req_ram": RAM_REQ,
+                    "duration": duration
+                }
+                
+                # Increased timeout to handle network congestion
                 response = requests.post(
                     f"{CENTRAL_NODE_URL}/deploy_application",
-                    json={"req_cpu": req_cpu, "req_ram": RAM_REQ},
-                    timeout=20
+                    json=payload,
+                    timeout=30 
                 )
                 
                 end_time = time.time()
                 latency = round(end_time - start_time, 4)
-                data = response.json()
-                
-                # 3. Analyze Result
+
+                # --- ROBUST RESPONSE HANDLING ---
+                try:
+                    data = response.json()
+                except ValueError:
+                    # If response is not JSON (e.g. 500 Error HTML), handle gracefully
+                    print(f"ERROR: Invalid JSON response")
+                    status = "System_Error"
+                    writer.writerow([i, req_cpu, duration, status, "N/A", "Error", 0])
+                    time.sleep(SLEEP_BETWEEN_TASKS)
+                    continue
+
+                # Analyze Data
                 status = data.get("status", "unknown")
                 assigned_cluster = data.get("assigned_cluster", "N/A")
                 
-                # Determine if it was Vicinity Offloading
-                offload_type = "Local"
-                
-                # Check deep inside the response structure for vicinity flags
-                if "cluster_response" in data:
-                    c_resp = data["cluster_response"]
-                    # Check if the cluster response says "offloaded_vicinity"
-                    if c_resp.get("status") == "offloaded_vicinity":
-                        offload_type = "Vicinity_Offload"
-                        # In vicinity offload, the 'assigned_cluster' is the original one, 
-                        # but the work happened elsewhere.
+                # Determine Offload Type and specific Worker ID
+                target_worker_id = "Unknown"
                 
                 if status == "Deployment Failed":
                     offload_type = "Failed"
                     print(f"FAILED ({data.get('reason')})")
                 else:
-                    print(f"SUCCESS -> Cluster {assigned_cluster} ({offload_type}) - {latency}s")
+                    # Dig deeper to find the worker ID for the log
+                    if "cluster_response" in data:
+                        c_resp = data["cluster_response"]
+                        
+                        # CASE A: Vicinity Offload
+                        if c_resp.get("status") == "offloaded_vicinity":
+                            offload_type = "Vicinity_Offload"
+                            # In vicinity, the worker ID is nested in 'details'
+                            if "details" in c_resp:
+                                target_worker_id = c_resp["details"].get("target_worker", "neighbor_node")
+                        
+                        # CASE B: Local Deployment
+                        elif "deployed" in c_resp.get("status", ""):
+                            offload_type = "Local"
+                            target_worker_id = c_resp.get("target_worker", "local_node")
 
-                # 4. Log to CSV
-                writer.writerow([i, req_cpu, status, assigned_cluster, offload_type, latency])
-                results.append(data)
+                    print(f"SUCCESS -> Cluster {assigned_cluster} ({offload_type})")
+
+                    # --- TRIGGER THE RELEASE LOG ---
+                    # Start a background thread to print the release message later
+                    threading.Thread(
+                        target=log_release, 
+                        args=(duration, req_cpu, target_worker_id), 
+                        daemon=True
+                    ).start()
+
+                # Log to CSV
+                writer.writerow([i, req_cpu, duration, status, assigned_cluster, offload_type, latency])
 
             except Exception as e:
-                print(f"ERROR: {e}")
-                writer.writerow([i, req_cpu, "Error", "N/A", "Error", 0])
+                print(f"ERROR: Connection Failed ({str(e)})")
+                writer.writerow([i, req_cpu, duration, "Connection_Error", "N/A", "Error", 0])
 
-            # Small delay to allow logs to print cleanly
-            time.sleep(2.0)
+            time.sleep(SLEEP_BETWEEN_TASKS)
 
-    print(f"\n--- Simulation Complete. Results saved to {CSV_FILENAME} ---")
+    # Wait a bit at the end for remaining logs to print
+    print("\n--- Simulation Requests Complete. Waiting for final tasks to release... ---")
+    time.sleep(MAX_DURATION)
+    print(f"--- Done. Results saved to {CSV_FILENAME} ---")
 
 if __name__ == "__main__":
     initialize()
-    # Optional: Reset docker containers manually before running if you want a clean slate
     run_simulation()
 
 # todo: global offloading
@@ -108,3 +148,4 @@ if __name__ == "__main__":
 # todo: in fact, we are making requests again and again from the central node, 
 # so we are simulating new applications, but we need dynamic load for currently deployed applications, 
 # so that vicinity comes to help and stuff
+# --> tell gemini to forget about the error for now and focus on global offloading + dynamic load
