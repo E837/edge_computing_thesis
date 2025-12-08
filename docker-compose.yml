@@ -9,11 +9,11 @@ services:
       - NODE_TYPE=central
       - NODE_ID=main
     ports:
-      - "5000:5000"  # Expose Central Node to your localhost
+      - "5000:5000"  # Access: http://localhost:5000
     networks:
       - edge_network
 
-  # --- Layer 2: Cluster Managers (3 Clusters) ---
+  # --- Layer 2: Cluster Managers ---
   cluster_1:
     build: ./cluster_node
     container_name: cluster_1
@@ -21,6 +21,8 @@ services:
       - NODE_TYPE=cluster_manager
       - NODE_ID=1
       - PARENT_NODE=central_node
+    ports:
+      - "5001:5000"  # Access: http://localhost:5001
     networks:
       - edge_network
 
@@ -31,6 +33,8 @@ services:
       - NODE_TYPE=cluster_manager
       - NODE_ID=2
       - PARENT_NODE=central_node
+    ports:
+      - "5002:5000"  # Access: http://localhost:5002
     networks:
       - edge_network
 
@@ -41,11 +45,13 @@ services:
       - NODE_TYPE=cluster_manager
       - NODE_ID=3
       - PARENT_NODE=central_node
+    ports:
+      - "5003:5000"  # Access: http://localhost:5003
     networks:
       - edge_network
 
-  # --- Layer 3: Edge Nodes (6 Devices, distributed among clusters) ---
-  # Cluster 1 has 2 Edge Nodes
+  # --- Layer 3: Edge Nodes ---
+  # Cluster 1
   edge_1_c1:
     build: ./edge_node
     container_name: edge_1_c1
@@ -53,8 +59,10 @@ services:
       - NODE_TYPE=edge_worker
       - NODE_ID=1_c1
       - PARENT_CLUSTER=cluster_1
-      - RESOURCES_CPU=4  # Simulating CPU cores
-      - RESOURCES_RAM=8192 # Simulating RAM in MB
+      - RESOURCES_CPU=4
+      - RESOURCES_RAM=8192
+    ports:
+      - "5004:5000"  # Access: http://localhost:5004
     networks:
       - edge_network
 
@@ -67,10 +75,12 @@ services:
       - PARENT_CLUSTER=cluster_1
       - RESOURCES_CPU=2
       - RESOURCES_RAM=4096
+    ports:
+      - "5005:5000"  # Access: http://localhost:5005
     networks:
       - edge_network
 
-  # Cluster 2 has 2 Edge Nodes
+  # Cluster 2
   edge_3_c2:
     build: ./edge_node
     container_name: edge_3_c2
@@ -80,6 +90,8 @@ services:
       - PARENT_CLUSTER=cluster_2
       - RESOURCES_CPU=4
       - RESOURCES_RAM=8192
+    ports:
+      - "5006:5000"  # Access: http://localhost:5006
     networks:
       - edge_network
 
@@ -92,10 +104,12 @@ services:
       - PARENT_CLUSTER=cluster_2
       - RESOURCES_CPU=2
       - RESOURCES_RAM=4096
+    ports:
+      - "5007:5000"  # Access: http://localhost:5007
     networks:
       - edge_network
 
-  # Cluster 3 has 2 Edge Nodes
+  # Cluster 3
   edge_5_c3:
     build: ./edge_node
     container_name: edge_5_c3
@@ -105,6 +119,8 @@ services:
       - PARENT_CLUSTER=cluster_3
       - RESOURCES_CPU=4
       - RESOURCES_RAM=8192
+    ports:
+      - "5008:5000"  # Access: http://localhost:5008
     networks:
       - edge_network
 
@@ -117,6 +133,8 @@ services:
       - PARENT_CLUSTER=cluster_3
       - RESOURCES_CPU=2
       - RESOURCES_RAM=4096
+    ports:
+      - "5009:5000"  # Access: http://localhost:5009
     networks:
       - edge_network
 
