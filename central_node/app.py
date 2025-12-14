@@ -5,111 +5,96 @@ import os
 
 app = Flask(__name__)
 
-# List of known clusters in our Docker network
+# Config
 CLUSTERS = {
     "1": "http://cluster_1:5000",
     "2": "http://cluster_2:5000",
     "3": "http://cluster_3:5000"
 }
 
-# SIMULATED LATENCY MATRIX (in milliseconds)
-# Represents the physical distance between clusters
-# If latency < 20ms, they are considered "Vicinity"
+# Topology (Distance)
 LATENCY_MATRIX = {
-    "1": {"2": 10, "3": 50},  # Cluster 1 is close to 2 (10ms), far from 3 (50ms)
-    "2": {"1": 10, "3": 15},  # Cluster 2 is close to both
-    "3": {"1": 50, "2": 15}   # Cluster 3 is close to 2, far from 1
+    "1": {"2": 10, "3": 50},
+    "2": {"1": 10, "3": 15},
+    "3": {"1": 50, "2": 15}
 }
-
-VICINITY_THRESHOLD = 20 # ms
+VICINITY_THRESHOLD = 20
 
 @app.route('/')
 def health_check():
     return jsonify({"status": "online", "role": "Central Cloud"})
 
-# --- Trigger to Calculate and Push Vicinity ---
 @app.route('/initialize_network', methods=['POST'])
 def initialize_network():
     results = {}
-    
     for source_id, source_url in CLUSTERS.items():
         neighbors = []
-        
-        # 1. Calculate neighbors based on Matrix
         if source_id in LATENCY_MATRIX:
             for target_id, latency in LATENCY_MATRIX[source_id].items():
                 if latency <= VICINITY_THRESHOLD:
-                    # Add the URL of the neighbor
                     neighbors.append(CLUSTERS[target_id])
         
-        # 2. Push this list to the specific Cluster Manager
         try:
-            payload = {"neighbors": neighbors}
-            # Send POST request to the Cluster Manager
-            resp = requests.post(f"{source_url}/update_vicinity", json=payload)
-            results[f"cluster_{source_id}"] = "Success" if resp.status_code == 200 else "Failed"
-        except Exception as e:
-            results[f"cluster_{source_id}"] = f"Error: {str(e)}"
-            
-    return jsonify({
-        "status": "Network Initialized", 
-        "topology_results": results,
-        "matrix_used": LATENCY_MATRIX
-    })
+            requests.post(f"{source_url}/update_vicinity", json={"neighbors": neighbors})
+            results[f"cluster_{source_id}"] = "Success"
+        except:
+            results[f"cluster_{source_id}"] = "Failed"
 
-# --- NEW: Algorithm 1 Implementation ---
-@app.route('/deploy_application', methods=['POST'])
-def deploy_application():
+    return jsonify({"status": "Network Initialized", "results": results})
+
+@app.route('/cluster_resources')
+def get_all_resources():
+    # Helper to see status of all clusters
+    report = {}
+    for cid, url in CLUSTERS.items():
+        try:
+            resp = requests.get(f"{url}/cluster_resources", timeout=1)
+            if resp.status_code == 200:
+                report[f"cluster_{cid}"] = resp.json()
+        except:
+            report[f"cluster_{cid}"] = "Offline"
+    return jsonify(report)
+
+# --- NEW: Global Scaling Logic ---
+@app.route('/global_scale_request', methods=['POST'])
+def global_scale_request():
     """
-    Algorithm 1: Deploy_Application_To_Cluster
-    Input: JSON { "req_cpu": 1.5, "req_ram": 500 }
-    Output: Assigned Cluster ID
+    Called when a Cluster + its Vicinity are full.
+    The Central Node looks for ANY cluster in the system with space.
     """
     data = request.json
-    req_cpu = data.get('req_cpu', 0)
-    req_ram = data.get('req_ram', 0)
+    requester_id = data.get('requester_id', 'unknown')
     
-    print(f"Received Request: Need CPU={req_cpu}, RAM={req_ram}")
+    print(f"[Central] Global Scale Request from Cluster {requester_id}")
 
-    best_cluster = None
-    max_available_cpu = -1 # Using "Most Free CPU" as a simple heuristic for "Lowest Workload"
-
-    # Iterate through all known clusters (c1, c2, c3)
-    for c_id, c_url in CLUSTERS.items():
-        try:
-            # 1. Query Cluster Manager (Line 6-7 of Algorithm 1)
-            resp = requests.get(f"{c_url}/cluster_resources", timeout=2)
-            if resp.status_code == 200:
-                info = resp.json()
-                avail = info['available_resources']
-                
-                print(f"Cluster {c_id} has CPU={avail['cpu']}, RAM={avail['ram']}")
-                
-                # 2. Check Feasibility (Line 9 of Algorithm 1)
-                if avail['cpu'] >= req_cpu and avail['ram'] >= req_ram:
-                    
-                    # 3. Selection Strategy (Line 10-13: Select Best)
-                    # Here we select the one with the MOST available CPU (Load Balancing)
-                    if avail['cpu'] > max_available_cpu:
-                        max_available_cpu = avail['cpu']
-                        best_cluster = c_id
-                        
-        except Exception as e:
-            print(f"Failed to contact Cluster {c_id}: {e}")
-
-    # 4. Final Decision (Line 17)
-    if best_cluster:
-        # Notify the chosen cluster to actually run the app (Line 20)
-        target_url = CLUSTERS[best_cluster]
-        deploy_resp = requests.post(f"{target_url}/run_container", json=data)
+    # Iterate through ALL known clusters
+    for cid, url in CLUSTERS.items():
         
-        return jsonify({
-            "status": "Deployment Successful",
-            "assigned_cluster": best_cluster,
-            "cluster_response": deploy_resp.json() if deploy_resp.status_code == 200 else "Error"
-        })
-    else:
-        return jsonify({"status": "Deployment Failed", "reason": "No cluster has enough resources"}), 503
+        # Skip the cluster that asked for help (it's already full)
+        if cid == requester_id:
+            continue
+            
+        # Optimization: We could check latency here to find the "next closest" 
+        # that wasn't in the strict vicinity, but for now we find "First Available".
+        
+        try:
+            print(f"[Central] Checking candidate: Cluster {cid}...")
+            # We send the request with 'is_offloaded=True' so the target 
+            # only checks its local resources and doesn't forward it again.
+            resp = requests.post(f"{url}/run_container", json=data, timeout=2)
+            
+            if resp.status_code == 200:
+                print(f"[Central] Found space in Cluster {cid}!")
+                return jsonify({
+                    "status": "success",
+                    "assigned_cluster": cid,
+                    "cluster_url": url,
+                    "target_response": resp.json()
+                })
+        except Exception as e:
+            print(f"Failed to contact Cluster {cid}: {e}")
+
+    return jsonify({"status": "failed", "reason": "No global resources available"}), 503
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

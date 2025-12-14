@@ -142,10 +142,3 @@ def run_simulation():
 if __name__ == "__main__":
     initialize()
     run_simulation()
-
-# todo: global offloading
-# todo: errors in the results? (ERROR: 'str' object has no attribute 'get')
-# todo: in fact, we are making requests again and again from the central node, 
-# so we are simulating new applications, but we need dynamic load for currently deployed applications, 
-# so that vicinity comes to help and stuff
-# --> tell gemini to forget about the error for now and focus on global offloading + dynamic load
