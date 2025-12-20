@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  fifa-tool:
+    build: .
+    container_name: fifa_processor_container
+    # This keeps the container running so you can execute commands inside it
+    tty: true 
+    # This maps your current Windows folder (.) to /data inside the container
+    volumes:
+      - .:/data
