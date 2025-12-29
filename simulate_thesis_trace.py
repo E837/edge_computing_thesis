@@ -31,14 +31,30 @@ def docker_req(container, method, endpoint, data=None):
 def print_header(msg):
     print(f"\n{'='*60}\n{msg}\n{'='*60}")
 
+# --- FIXED EXTRACTION FUNCTION ---
 def extract_worker_id(response):
     """Parses complex nested JSON to find who handled the request"""
     if isinstance(response, str): return "error"
-    if "target_worker" in response: return response["target_worker"]
-    if "scaling_response" in response: return extract_worker_id(response["scaling_response"])
-    if "details" in response:
-        if isinstance(response["details"], dict): return extract_worker_id(response["details"])
+    
+    # 1. Direct match (Edge Node response)
     if "worker_id" in response: return response["worker_id"]
+    
+    # 2. Local Scale match (Cluster Node response)
+    if "target_worker" in response: return response["target_worker"]
+    
+    # 3. Vicinity/Global Scale wrapper (Cluster Node response)
+    if "scaling_response" in response: 
+        return extract_worker_id(response["scaling_response"])
+        
+    # 4. Global Scale wrapper (Central Node response) <--- NEW FIX
+    if "target_response" in response:
+        return extract_worker_id(response["target_response"])
+
+    # 5. Generic wrapper (Cluster Node details)
+    if "details" in response:
+        if isinstance(response["details"], dict): 
+            return extract_worker_id(response["details"])
+            
     return "unknown"
 
 # ==========================================
@@ -104,8 +120,7 @@ for index, row in df.iterrows():
     while current_capacity < required_cpu:
         load_diff = required_cpu - current_capacity
         
-        # CRITICAL FIX: Generate UNIQUE ID for every replica
-        # This forces the Edge Node to stack memory, not overwrite it.
+        # Generate UNIQUE ID for every replica
         new_replica_id = f"{task_base_id}_m{minute}_r{current_replicas+1}"
         
         print(f"\n[Min {minute}] Demand: {required_cpu:.2f} | Current: {current_capacity:.2f} | Spawning Replica...")
@@ -117,7 +132,6 @@ for index, row in df.iterrows():
         }
         
         # Send Request to Cluster 1 (Gateway)
-        # We call run_container directly to simulate a new pod scheduling request
         resp = docker_req(GATEWAY_NODE, "post", "/run_container", payload)
         
         action_status = str(resp).lower()
