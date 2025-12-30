@@ -10,44 +10,51 @@ app = Flask(__name__)
 # --- Configuration ---
 NODE_ID = os.getenv('NODE_ID', 'unknown_edge')
 PARENT_CLUSTER = os.getenv('PARENT_CLUSTER', 'cluster_1')
-TOTAL_CPU = float(os.getenv('RESOURCES_CPU', 1.0))
+
+# Total Physical Capacity
+TOTAL_CPU = int(os.getenv('RESOURCES_CPU', 1))
 TOTAL_RAM = int(os.getenv('RESOURCES_RAM', 1024))
 
-# --- State ---
-TASKS = {} 
-allocated_resources = { "cpu": 0.0, "ram": 0 }
+# Current Allocations
+allocated_resources = {
+    "cpu": 0.0,
+    "ram": 0
+}
+TASKS = {} # Stores active tasks: { "task_id": { "cpu": 1.0, "ram": 100 } }
 
 def register_with_cluster():
-    time.sleep(5)
+    """Registers this worker with its parent cluster manager."""
+    time.sleep(3)
     cluster_url = f"http://{PARENT_CLUSTER}:5000/register_worker"
     my_url = f"http://{os.getenv('HOSTNAME')}:5000"
+
     payload = {
         "worker_id": NODE_ID,
         "worker_url": my_url,
         "capacity": { "cpu": TOTAL_CPU, "ram": TOTAL_RAM }
     }
-    while True:
-        try:
-            requests.post(cluster_url, json=payload, timeout=2)
-            print(f"[{NODE_ID}] Registered with {PARENT_CLUSTER}")
-            break
-        except:
-            time.sleep(5)
+    try:
+        requests.post(cluster_url, json=payload)
+        print(f"[{NODE_ID}] Registered with {PARENT_CLUSTER}")
+    except Exception as e:
+        print(f"[{NODE_ID}] Registration failed: {e}")
 
 threading.Thread(target=register_with_cluster, daemon=True).start()
 
 @app.route('/')
 def health_check():
-    return jsonify({"status": "online", "id": NODE_ID, "tasks": len(TASKS)})
+    return jsonify({"status": "online", "id": NODE_ID})
 
 @app.route('/stats')
 def get_stats():
-    used_cpu = sum(t['cpu'] for t in TASKS.values())
-    used_ram = sum(t['ram'] for t in TASKS.values())
+    """Returns current capacity and usage."""
     return jsonify({
         "capacity": {"cpu": TOTAL_CPU, "ram": TOTAL_RAM},
-        "allocated": {"cpu": used_cpu, "ram": used_ram},
-        "available": {"cpu": TOTAL_CPU - used_cpu, "ram": TOTAL_RAM - used_ram}
+        "allocated": allocated_resources,
+        "available": {
+            "cpu": TOTAL_CPU - allocated_resources['cpu'],
+            "ram": TOTAL_RAM - allocated_resources['ram']
+        }
     })
 
 @app.route('/run_task', methods=['POST'])
@@ -55,70 +62,53 @@ def run_task():
     data = request.json
     req_cpu = float(data.get('req_cpu', 0))
     req_ram = int(data.get('req_ram', 0))
-    task_id = data.get('task_id', f"task_{int(time.time())}")
+    task_id = data.get('task_id', 'unknown')
 
-    used_cpu = sum(t['cpu'] for t in TASKS.values())
-    
-    if (used_cpu + req_cpu) > TOTAL_CPU + 0.1:
-        return jsonify({"status": "failed", "reason": "insufficient_cpu"}), 400
+    available_cpu = TOTAL_CPU - allocated_resources['cpu']
+    available_ram = TOTAL_RAM - allocated_resources['ram']
 
-    TASKS[task_id] = { "cpu": req_cpu, "ram": req_ram, "current_load": 0.1 }
-    
-    print(f"[{NODE_ID}] Task Started: {task_id}")
-    # RETURN WORKER ID HERE
-    return jsonify({"status": "deployed", "task_id": task_id, "worker_id": NODE_ID})
+    # Strict Check
+    if req_cpu > (available_cpu + 0.01) or req_ram > available_ram:
+        return jsonify({
+            "status": "failed", 
+            "reason": "insufficient_resources_on_node"
+        }), 400
 
-@app.route('/resize_task', methods=['POST'])
-def resize_task():
+    # Allocate
+    allocated_resources['cpu'] += req_cpu
+    allocated_resources['ram'] += req_ram
+    TASKS[task_id] = { "cpu": req_cpu, "ram": req_ram }
+
+    print(f"[{NODE_ID}] Allocated Task {task_id}: {req_cpu} CPU")
+
+    return jsonify({
+        "status": "allocated",
+        "worker_id": NODE_ID,
+        "current_state": allocated_resources
+    })
+
+# --- NEW: Scale Down Logic ---
+@app.route('/terminate_task', methods=['POST'])
+def terminate_task():
     data = request.json
-    t_id = data.get('task_id')
-    add_cpu = float(data.get('add_cpu', 0))
-    
-    if t_id in TASKS:
-        TASKS[t_id]['cpu'] += add_cpu
-        TASKS[t_id]['current_load'] = TASKS[t_id]['cpu'] * 0.8
-        return jsonify({"status": "resized", "worker_id": NODE_ID})
-    return jsonify({"error": "task_not_found"}), 404
+    task_id = data.get('task_id')
 
-@app.route('/simulate_load', methods=['POST'])
-def simulate_load():
-    data = request.json
-    increase = float(data.get('load_increase', 0))
-    
-    if not TASKS: return jsonify({"error": "Task not found"}), 404
-    target_id = data.get('task_id', list(TASKS.keys())[0])
-    
-    if target_id not in TASKS: return jsonify({"error": "Task not found"}), 404
+    if task_id in TASKS:
+        # 1. Get resources used by this task
+        cpu_to_free = TASKS[task_id]['cpu']
+        ram_to_free = TASKS[task_id]['ram']
 
-    task = TASKS[target_id]
-    task['current_load'] += increase
-    
-    # CHECK FOR OVERLOAD
-    if task['current_load'] > task['cpu']:
-        needed = task['current_load'] - task['cpu'] + 0.5
-        print(f"[{NODE_ID}] 🚨 OVERLOAD! Requesting scale...")
+        # 2. Release resources
+        allocated_resources['cpu'] = max(0.0, allocated_resources['cpu'] - cpu_to_free)
+        allocated_resources['ram'] = max(0, allocated_resources['ram'] - ram_to_free)
         
-        try:
-            resp = requests.post(
-                f"http://{PARENT_CLUSTER}:5000/autoscale_request",
-                json={
-                    "source_node": NODE_ID,
-                    "task_id": target_id,
-                    "current_alloc": task['cpu'],
-                    "needed_cpu": needed,
-                    "worker_url": f"http://{os.getenv('HOSTNAME')}:5000"
-                },
-                timeout=5
-            )
-            return jsonify({
-                "status": "overload_reported", 
-                "scaling_response": resp.json(),
-                "worker_id": NODE_ID
-            })
-        except Exception as e:
-            return jsonify({"status": "cluster_unreachable", "error": str(e)})
-
-    return jsonify({"status": "load_updated", "worker_id": NODE_ID})
+        # 3. Remove task
+        del TASKS[task_id]
+        print(f"[{NODE_ID}] Terminated Task {task_id}. Freed {cpu_to_free} CPU.")
+        
+        return jsonify({"status": "terminated", "freed_cpu": cpu_to_free})
+    
+    return jsonify({"status": "not_found", "error": "Task ID not found on this node"}), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

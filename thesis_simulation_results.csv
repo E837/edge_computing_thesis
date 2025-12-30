@@ -5,10 +5,10 @@ Minute,Requests,Required_CPU,Allocated_CPU,Replicas,Status,Worker_Distribution
 4,50,1.0,1.0,1,Stable,2_c1
 5,150,1.5,2.0,2,Scaled Local,2_c1 | 2_c1
 6,400,4.0,4.0,4,Scaled Local,2_c1 | 2_c1 | 1_c1 | 1_c1
-7,740,7.4,8.0,8,Scaled Vicinity,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 4_c2 | 4_c2
-8,1350,13.5,14.0,14,Scaled Global,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 4_c2 | 4_c2 | 3_c2 | 3_c2 | 3_c2 | 3_c2 | 5_c3 | 5_c3
-9,532,5.32,14.0,14,Over-provisioned,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 4_c2 | 4_c2 | 3_c2 | 3_c2 | 3_c2 | 3_c2 | 5_c3 | 5_c3
-10,154,1.54,14.0,14,Over-provisioned,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 4_c2 | 4_c2 | 3_c2 | 3_c2 | 3_c2 | 3_c2 | 5_c3 | 5_c3
-11,32,1.0,14.0,14,Over-provisioned,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 4_c2 | 4_c2 | 3_c2 | 3_c2 | 3_c2 | 3_c2 | 5_c3 | 5_c3
-12,15,1.0,14.0,14,Over-provisioned,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 4_c2 | 4_c2 | 3_c2 | 3_c2 | 3_c2 | 3_c2 | 5_c3 | 5_c3
-13,2,1.0,14.0,14,Over-provisioned,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 4_c2 | 4_c2 | 3_c2 | 3_c2 | 3_c2 | 3_c2 | 5_c3 | 5_c3
+7,740,7.4,8.0,8,Scaled Local + Scaled Vicinity,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 3_c2 | 3_c2
+8,1350,13.5,14.0,14,Scaled Vicinity + Scaled Global,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 3_c2 | 3_c2 | 3_c2 | 3_c2 | 4_c2 | 4_c2 | 6_c3 | 6_c3
+9,532,5.32,6.0,6,Scaled Down,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1
+10,154,1.54,2.0,2,Scaled Down,1_c1 | 1_c1
+11,32,1.0,1.0,1,Scaled Down,1_c1
+12,15,1.0,1.0,1,Stable,1_c1
+13,2,1.0,1.0,1,Stable,1_c1
