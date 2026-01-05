@@ -7,8 +7,8 @@ import pandas as pd
 import sys
 
 # --- CONFIGURATION ---
-CSV_FILE = "test_log_bursts_modified.csv"
-OUTPUT_FILE = "thesis_simulation_results.csv"
+CSV_FILE = "wc_day6_1_bursts.csv"
+OUTPUT_FILE = "wc_day6_1_bursts_results.csv"
 APP_ID = "thesis_app"
 GATEWAY_CLUSTER = "cluster_1"
 
@@ -97,3 +97,10 @@ for index, row in df.iterrows():
 
 print_header("SIMULATION COMPLETE")
 print(f"Results saved to: {OUTPUT_FILE}")
+
+
+# TODO: did the simulation on wc_day6 dataset, but the question here is:
+# 1. how to add proactive scaling to the system
+# 2. and more importantly, how to evaluate the performance of the system with and without proactive scaling (reactive vs proactive)
+# 3. how to add visualizations to the results
+# so we should go back and work with the small dummy dataset to do all of these there
