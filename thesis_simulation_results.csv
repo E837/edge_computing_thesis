@@ -1,14 +1,14 @@
 Minute,Requests,Required_CPU,Allocated_CPU,Replicas,Status,Worker_Distribution
-1,2,1.0,1.0,1,Stable,2_c1
-2,11,1.0,1.0,1,Stable,2_c1
-3,16,1.0,1.0,1,Stable,2_c1
-4,50,1.0,1.0,1,Stable,2_c1
-5,150,1.5,2.0,2,Scaled Local,2_c1 | 2_c1
-6,400,4.0,4.0,4,Scaled Local,2_c1 | 2_c1 | 1_c1 | 1_c1
-7,740,7.4,8.0,8,Scaled Local + Scaled Vicinity,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 3_c2 | 3_c2
-8,1350,13.5,14.0,14,Scaled Vicinity + Scaled Global,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1 | 3_c2 | 3_c2 | 3_c2 | 3_c2 | 4_c2 | 4_c2 | 6_c3 | 6_c3
-9,532,5.32,6.0,6,Scaled Down,2_c1 | 2_c1 | 1_c1 | 1_c1 | 1_c1 | 1_c1
-10,154,1.54,2.0,2,Scaled Down,1_c1 | 1_c1
-11,32,1.0,1.0,1,Scaled Down,1_c1
-12,15,1.0,1.0,1,Stable,1_c1
-13,2,1.0,1.0,1,Stable,1_c1
+1,2,1.0,1.0,1,Stable,2_c1(local)
+2,11,1.0,1.0,1,Stable,2_c1(local)
+3,16,1.0,1.0,1,Stable,2_c1(local)
+4,50,1.0,1.0,1,Stable,2_c1(local)
+5,150,1.5,2.0,2,Scaled LOCAL: 2_c1,2_c1(local) | 2_c1(local)
+6,400,4.0,4.0,4,Scaled LOCAL: 1_c1 + Scaled LOCAL: 1_c1,2_c1(local) | 2_c1(local) | 1_c1(local) | 1_c1(local)
+7,740,7.4,8.0,8,Scaled LOCAL: 1_c1 + Scaled LOCAL: 1_c1 + Scaled VICINITY: 4_c2 + Scaled VICINITY: 4_c2,2_c1(local) | 2_c1(local) | 1_c1(local) | 1_c1(local) | 1_c1(local) | 1_c1(local) | 4_c2(vicinity) | 4_c2(vicinity)
+8,1350,13.5,14.0,14,Scaled VICINITY: 3_c2 + Scaled VICINITY: 3_c2 + Scaled VICINITY: 3_c2 + Scaled VICINITY: 3_c2 + Scaled GLOBAL: 6_c3 + Scaled GLOBAL: 6_c3,2_c1(local) | 2_c1(local) | 1_c1(local) | 1_c1(local) | 1_c1(local) | 1_c1(local) | 4_c2(vicinity) | 4_c2(vicinity) | 3_c2(vicinity) | 3_c2(vicinity) | 3_c2(vicinity) | 3_c2(vicinity) | 6_c3(global) | 6_c3(global)
+9,532,5.32,6.0,6,Scaled DOWN: global + Scaled DOWN: global + Scaled DOWN: vicinity + Scaled DOWN: vicinity + Scaled DOWN: vicinity + Scaled DOWN: vicinity + Scaled DOWN: vicinity + Scaled DOWN: vicinity,2_c1(local) | 2_c1(local) | 1_c1(local) | 1_c1(local) | 1_c1(local) | 1_c1(local)
+10,154,1.54,2.0,2,Scaled DOWN: local + Scaled DOWN: local + Scaled DOWN: local + Scaled DOWN: local,1_c1(local) | 1_c1(local)
+11,32,1.0,1.0,1,Scaled DOWN: local,1_c1(local)
+12,15,1.0,1.0,1,Stable,1_c1(local)
+13,2,1.0,1.0,1,Stable,1_c1(local)
