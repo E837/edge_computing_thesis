@@ -104,3 +104,7 @@ print(f"Results saved to: {OUTPUT_FILE}")
 # 2. and more importantly, how to evaluate the performance of the system with and without proactive scaling (reactive vs proactive)
 # 3. how to add visualizations to the results
 # so we should go back and work with the small dummy dataset to do all of these there
+
+# --> Ask gemini/claude how to make the process real? with kubernetes or docker swarm or smthng like that
+# OR, how to make a good prediction out of the dataset?
+# OR, discuss the concern that how we can differentiate between reative vs proative when we have no parameter like response time or latency to compare

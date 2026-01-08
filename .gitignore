@@ -4,3 +4,4 @@ thesis_experiment_results*.csv
 *-chat.txt
 fifa_processor/*.csv
 fifa_processor/*.gz
+**/.venv/
